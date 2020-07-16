@@ -3,6 +3,8 @@
  *
  *  Created on: 5 Jul 2020
  *      Author: jp112sdl
+ *
+ *      https://www.luisllamas.es/arduino-sensor-corriente-sct-013/
  */
 
 #ifndef SENSORS_ADS1X15_H_
@@ -19,7 +21,7 @@
   // ads.setGain(GAIN_SIXTEEN);    +/- 0.256V  1 bit = 0.0078125mV
 namespace as {
 
-template <uint8_t ADDRESS, uint8_t CT_AMPS>
+template <uint8_t ADDRESS>
 class Sens_Ads1x15 {
 private:
   Adafruit_ADS1115 ads;
@@ -33,6 +35,7 @@ public:
   void init (adsGain_t gain) {
     ads.begin();
     ads.setGain(gain);
+    DPRINT(F("ADS1115 init at address "));DHEX(ADDRESS);DPRINT(F(", gain "));DDEC(gain);;
   }
 
   int16_t rawToVolt(int16_t in) {
@@ -54,7 +57,7 @@ public:
     }
   }
 
-  uint32_t getCurrent(bool adc_0_1, uint16_t sampleTimeMS) {
+  uint32_t getCurrent(bool adc_0_1, uint16_t sampleTimeMS, uint8_t factor) {
     long ms = millis();
     int32_t voltage = 0;
     int32_t current = 0;
@@ -63,7 +66,7 @@ public:
     while (millis() - ms < sampleTimeMS)
     {
       voltage = rawToVolt(adc_0_1 ? ads.readADC_Differential_0_1():ads.readADC_Differential_2_3());
-      current = voltage * CT_AMPS;
+      current = voltage * factor;
       current /= 10.0;
 
       sum += sq(current);
@@ -73,12 +76,12 @@ public:
     return (current);
   }
 
-  uint32_t getCurrent_0_1(uint16_t sampleTimeMS) {
-     return getCurrent(true,sampleTimeMS);
+  uint32_t getCurrent_0_1(uint16_t sampleTimeMS, uint8_t factor) {
+     return getCurrent(true,sampleTimeMS, factor);
   }
 
-  uint32_t getCurrent_2_3(uint16_t sampleTimeMS) {
-     return getCurrent(false,sampleTimeMS);
+  uint32_t getCurrent_2_3(uint16_t sampleTimeMS, uint8_t factor) {
+     return getCurrent(false,sampleTimeMS, factor);
   }
 
   int16_t read_0_1 () {
