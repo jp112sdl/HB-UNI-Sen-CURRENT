@@ -27,15 +27,24 @@ private:
   Adafruit_ADS1115 ads;
   int16_t val_0_1;
   int16_t val_2_3;
+  bool present;
 public:
 
-  Sens_Ads1x15 () : ads(ADDRESS),val_0_1(0), val_2_3(0) {}
+  Sens_Ads1x15 () : ads(ADDRESS),val_0_1(0), val_2_3(0), present(false) {}
   ~Sens_Ads1x15() {}
 
   void init (adsGain_t gain) {
     ads.begin();
-    ads.setGain(gain);
-    DPRINT(F("ADS1115 init at address "));DHEX(ADDRESS);DPRINT(F(", gain "));DDEC(gain);;
+    Wire.beginTransmission(ADDRESS);
+    DPRINT(F("ADS1115 init at address "));DHEX(ADDRESS);
+    if (Wire.endTransmission() == 0) {
+      ads.setGain(gain);
+      DPRINT(F(" OK, gain "));DDEC(gain);;
+      present = true;
+    } else {
+      DPRINTLN(F(" FAILED!"));
+      present = false;
+    }
   }
 
   int16_t rawToVolt(int16_t in) {
@@ -58,22 +67,26 @@ public:
   }
 
   uint32_t getCurrent(bool adc_0_1, uint16_t sampleTimeMS, uint8_t factor) {
-    long ms = millis();
-    int32_t voltage = 0;
-    int32_t current = 0;
-    int32_t sum = 0;
-    int16_t counter = 0;
-    while (millis() - ms < sampleTimeMS)
-    {
-      voltage = rawToVolt(adc_0_1 ? ads.readADC_Differential_0_1():ads.readADC_Differential_2_3());
-      current = voltage * factor;
-      current /= 10.0;
+    if (present) {
+      long ms = millis();
+      int32_t voltage = 0;
+      int32_t current = 0;
+      int32_t sum = 0;
+      int16_t counter = 0;
+      while (millis() - ms < sampleTimeMS)
+      {
+        voltage = rawToVolt(adc_0_1 ? ads.readADC_Differential_0_1():ads.readADC_Differential_2_3());
+        current = voltage * factor;
+        current /= 10.0;
 
-      sum += sq(current);
-      counter++;
-     }
-    current = sqrt(sum / counter);
-    return (current);
+        sum += sq(current);
+        counter++;
+       }
+      current = sqrt(sum / counter);
+      return (current);
+    } else {
+      return 0;
+    }
   }
 
   uint32_t getCurrent_0_1(uint16_t sampleTimeMS, uint8_t factor) {
@@ -85,16 +98,24 @@ public:
   }
 
   int16_t read_0_1 () {
+    if (present == true) {
     val_0_1 = ads.readADC_Differential_0_1();
     DPRINT(F("Differential: ")); DDEC(val_0_1); DPRINT(F(" (")); DDEC(rawToVolt(val_0_1)); DPRINTLN(F("mV)"));
     return val_0_1;
+    } else {
+      return 0;
+    }
   }
 
   int16_t read_2_3 () {
-    val_2_3 = ads.readADC_Differential_2_3();
-    DPRINT(F("Differential: ")); DDEC(val_2_3); DPRINT(F(" (")); DDEC(rawToVolt(val_2_3)); DPRINTLN(F("mV)"));
-    return val_2_3;
-  }
+    if (present == true) {
+      val_2_3 = ads.readADC_Differential_2_3();
+      DPRINT(F("Differential: ")); DDEC(val_2_3); DPRINT(F(" (")); DDEC(rawToVolt(val_2_3)); DPRINTLN(F("mV)"));
+      return val_2_3;
+    } else {
+      return 0;
+    }
+}
 
 };
 
