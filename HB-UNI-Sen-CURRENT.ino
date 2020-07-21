@@ -45,6 +45,7 @@ enum conditionTypes { ct_none, ct_above, ct_below, ct_disabled };
 typedef struct {
   uint32_t current;
   uint8_t conditionType = ct_none;
+  bool ok;
 } _currentSensor;
 
 // define all device properties
@@ -133,14 +134,14 @@ class DevList1 : public RegList1<CReg1> {
 
 class MeasureEventMsg : public Message {
   public:
-    void init(uint8_t msgcnt, uint32_t *sensorValues, bool batlow) {
-      Message::init(0xa + (NUM_CHANNELS * 3), msgcnt, 0x53, BCAST, batlow ? 0x80 : 0x00, 0x01);
-      DPRINT(F("+Current (#0) : ")); DDECLN(sensorValues[0]);
+    void init(uint8_t msgcnt, uint32_t *sensorValues, _currentSensor *cs, bool batlow) {
+      Message::init(0xa + (NUM_CHANNELS * 3), msgcnt, 0x53, BCAST, batlow ? 0x80 : 0x00, cs[0].ok ? 0x41 : 0xC1);
+      //DPRINT(F("+Current (#0) : ")); DDECLN(sensorValues[0]);
       pload[0] =  (sensorValues[0] >> 8) & 0xff;
       pload[1] = (sensorValues[0])   & 0xff;
       for (uint8_t s = 0; s < NUM_CHANNELS - 1; s++) {
-        DPRINT(F("+Current (#")); DDEC(s + 1); DPRINT(F(") : ")); DDECLN(sensorValues[s+1]);
-        pload[2+(s * 3)] = 0x02 + s;
+        //DPRINT(F("+Current (#")); DDEC(s + 1); DPRINT(F(") : ")); DDECLN(sensorValues[s+1]);
+        pload[2+(s * 3)] = (cs[s+1].ok ? 0x42 : 0xC2) + s;
         pload[3+(s * 3)] = (sensorValues[s+1] >> 8) & 0xff;
         pload[4+(s * 3)] =  sensorValues[s+1]       & 0xff;
       }
@@ -257,13 +258,13 @@ class MeasureChannel : public Channel<Hal, DevList1, EmptyList, List4, PEERS_PER
     virtual ~MeasureChannel () {}
 
     virtual void configChanged() {
-      DPRINT("configChanged on Ch");DDECLN(number());
+    /*  DPRINT("configChanged on Ch");DDECLN(number());
       DPRINT("condTxThresholdHi  : ");DDECLN(this->getList1().condTxThresholdHi());
       DPRINT("condTxDecisionAbove: ");DDECLN(this->getList1().condTxDecisionAbove());
       DPRINT("condTxThresholdLo  : ");DDECLN(this->getList1().condTxThresholdLo());
       DPRINT("condTxDecisionBelow: ");DDECLN(this->getList1().condTxDecisionBelow());
       DPRINT("sensorType         : ");DDECLN(this->getList1().sensorType());
-      DPRINT("sampleTime         : ");DDECLN(this->getList1().sampleTime());
+      DPRINT("sampleTime         : ");DDECLN(this->getList1().sampleTime());*/
     }
 
     void checkConditions(_currentSensor *sensor) {
@@ -327,7 +328,7 @@ class MeasureChannel : public Channel<Hal, DevList1, EmptyList, List4, PEERS_PER
     }
 
     uint8_t status () const { return 0; }
-    uint8_t flags  () const { return this->device().battery().low() ? 0x80 : 0x00; }
+    uint8_t flags  () const { return device().battery().low() ? 0x80 : 00; }
 };
 
 class DevType : public MultiChannelDevice<Hal, MeasureChannel, NUM_CHANNELS, DevList0> {
@@ -350,12 +351,10 @@ public:
        CurrentSensors (DevType& d) : Alarm(0), dev(d), measureCount(0) {}
        virtual ~CurrentSensors () {}
        void measure() {
-         measureCount++;
-
          //measurement here:
-         cs[0].current = ads1.getCurrent_0_1(dev.channel(1).sampleTime(), dev.channel(1).sctFactor());
-         cs[1].current = ads1.getCurrent_2_3(dev.channel(2).sampleTime(), dev.channel(2).sctFactor());
-         cs[2].current = ads2.getCurrent_0_1(dev.channel(3).sampleTime(), dev.channel(3).sctFactor());
+         cs[0].current = ads1.getCurrent_0_1(dev.channel(1).sampleTime(), dev.channel(1).sctFactor());cs[0].ok = ads1.checkSensor();
+         cs[1].current = ads1.getCurrent_2_3(dev.channel(2).sampleTime(), dev.channel(2).sctFactor());cs[1].ok = ads1.checkSensor();
+         cs[2].current = ads2.getCurrent_0_1(dev.channel(3).sampleTime(), dev.channel(3).sctFactor());cs[2].ok = ads2.checkSensor();
 
          // only for testing: use random values
          for (uint8_t s = 0; s < NUM_CHANNELS; s++) {
@@ -383,6 +382,7 @@ public:
          cumulatedCurrentValues[1] += cs[1].current;
          cumulatedCurrentValues[2] += cs[2].current;
 
+         measureCount++;
          DPRINT("measure() #");DDEC(measureCount);DPRINT(" of ");DDECLN(dev.txInterval);
 
          // check if any of the sensors is above/below a threshold
@@ -391,7 +391,7 @@ public:
            if (dev.getList0().conditionCheckAverage() == false) {
              dev.channel(ch+1).checkConditions(cs);
            } else {
-             if (measureCount == dev.txInterval) {
+             if (measureCount >= dev.txInterval) {
                cs[ch].current = cumulatedCurrentValues[ch] / measureCount;
                dev.channel(ch+1).checkConditions(cs);
              }
@@ -401,7 +401,7 @@ public:
          set(seconds2ticks(max(10, dev.measureInterval * SYSCLOCK_FACTOR)));
 
          // send the cyclic message 
-         if (measureCount == dev.txInterval) {
+         if (measureCount >= dev.txInterval) {
            bool batlow = dev.onBattery() ? dev.battery().low() : false;
 
            // divide cumulated values by measure count
@@ -409,7 +409,7 @@ public:
              cumulatedCurrentValues[ch] /= measureCount;
              
            MeasureEventMsg& msg = (MeasureEventMsg&)dev.message();             
-           msg.init(dev.nextcount(), cumulatedCurrentValues, batlow);
+           msg.init(dev.nextcount(), cumulatedCurrentValues, cs, batlow);
            dev.broadcastEvent(msg);
 
            // reset values
@@ -417,7 +417,6 @@ public:
            for (uint8_t s = 0; s < NUM_CHANNELS; s++)
              cumulatedCurrentValues[s] = 0;
          }
-
          sysclock.add(*this);
        }
     } currentSensors;
@@ -436,13 +435,12 @@ public:
   virtual void configChanged () {
     TSDevice::configChanged();
     uint8_t batlow = max(this->getList0().lowBatLimit(),19);
-    DPRINT(F("*LOWBAT Limit: "));
-    DDECLN(batlow);
+    // DPRINT(F("*LOWBAT Limit: "));DDECLN(batlow);
     this->battery().low(batlow);
 
     if (this->getList0().Messintervall() != measureInterval) {
       measureInterval = this->getList0().Messintervall();
-      DPRINT(F("*ME Intervall: ")); DDECLN(measureInterval);
+      //DPRINT(F("*ME Intervall: ")); DDECLN(measureInterval);
       if (boot == false) {
         sysclock.cancel(currentSensors);
         currentSensors.set(seconds2ticks(max(10, measureInterval) * SYSCLOCK_FACTOR));
@@ -453,17 +451,17 @@ public:
     }
 
     txInterval = max(1, this->getList0().Sendeintervall());
-    DPRINT(F("*TX Intervall: ")); DDECLN(txInterval);
+    //DPRINT(F("*TX Intervall: ")); DDECLN(txInterval);
 
     onBattery(this->getList0().powerSupply());
-    DPRINT(F("*Batterymode : ")); DDECLN(onBattery());
+    //DPRINT(F("*Batterymode : ")); DDECLN(onBattery());
 
     uint8_t bOn = this->getList0().backOnTime();
-    DPRINT(F("*LCD Backlight Ontime : ")); DDECLN(bOn);
+    //DPRINT(F("*LCD Backlight Ontime : ")); DDECLN(bOn);
     lcd.setBackLightOnTime(bOn);
 
-    bool cc = this->getList0().conditionCheckAverage();
-    DPRINT(F("*Condition Check on Average : ")); DDECLN(cc);
+    //bool cc = this->getList0().conditionCheckAverage();
+    //DPRINT(F("*Condition Check on Average : ")); DDECLN(cc);
 
     boot = false;
   }
