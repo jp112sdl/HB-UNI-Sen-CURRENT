@@ -47,6 +47,14 @@ public:
     }
   }
 
+  bool checkSensor() {
+    Wire.beginTransmission(ADDRESS);
+    bool isOk = (Wire.endTransmission() == 0);
+    //DPRINT("checkSensor() ");DHEX(ADDRESS);DPRINT(" is ");DPRINTLN(isOk ? "OK":"NOT OK");
+    present = isOk;
+    return isOk;
+  }
+
   int16_t rawToVolt(int16_t in) {
     switch (ads.getGain()) {
       case (GAIN_TWOTHIRDS):
