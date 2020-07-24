@@ -25,6 +25,8 @@
 #endif
 
 #include "Sensors/Ads1x15.h"
+#define ADS1115_ADDR_1 0x4B
+#define ADS1115_ADDR_2 0x4A
 #define ADS_SENSOR_GAIN   adsGain_t::GAIN_TWO
 
 
@@ -342,8 +344,8 @@ private:
 public:
   class CurrentSensors : public Alarm {
     DevType&   dev;
-    Sens_Ads1x15<0x48> ads1;
-    Sens_Ads1x15<0x49> ads2;
+    Sens_Ads1x15<ADS1115_ADDR_1> ads1;
+    Sens_Ads1x15<ADS1115_ADDR_2> ads2;
     _currentSensor cs[NUM_CHANNELS];
     uint32_t cumulatedCurrentValues[NUM_CHANNELS];
     uint8_t measureCount;
@@ -356,12 +358,6 @@ public:
          cs[1].current = ads1.getCurrent_2_3(dev.channel(2).sampleTime(), dev.channel(2).sctFactor());cs[1].ok = ads1.checkSensor();
          cs[2].current = ads2.getCurrent_0_1(dev.channel(3).sampleTime(), dev.channel(3).sctFactor());cs[2].ok = ads2.checkSensor();
 
-         // only for testing: use random values
-         for (uint8_t s = 0; s < NUM_CHANNELS; s++) {
-           uint32_t c = random(5000);
-          // DPRINT(F("+Current: ")); DDECLN(c);
-           cs[s].current = c;
-         }
 #ifdef LCD_ADDRESS
          lcd.displayValues(cs);
 #endif
