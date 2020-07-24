@@ -39,7 +39,7 @@ public:
     DPRINT(F("ADS1115 init at address "));DHEX(ADDRESS);
     if (Wire.endTransmission() == 0) {
       ads.setGain(gain);
-      DPRINT(F(" OK, gain "));DDEC(gain);;
+      DPRINT(F(" OK, gain "));DDECLN(gain);;
       present = true;
     } else {
       DPRINTLN(F(" FAILED!"));
