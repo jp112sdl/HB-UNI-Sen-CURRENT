@@ -47,4 +47,6 @@ unterstützt
  
  
  ## CCU Bedienung
+ Anzeige von aktueller Stromstärke, ggf. zuletzt gesendetem Entscheidungswert sowie Fehler (bei Ausfall eines ADS1115 Moduls)
  ![Bedienung](Images/CCU_Bedienung.png)
+ 
