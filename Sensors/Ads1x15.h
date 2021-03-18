@@ -11,7 +11,7 @@
 #define SENSORS_ADS1X15_H_
 
 #include <Wire.h>
-#include <Adafruit_ADS1015.h>
+#include <Adafruit_ADS1X15.h>
 
   // ads.setGain(GAIN_TWOTHIRDS);  +/- 6.144V  1 bit = 0.1875mV (default)
   // ads.setGain(GAIN_ONE);        +/- 4.096V  1 bit = 0.125mV
