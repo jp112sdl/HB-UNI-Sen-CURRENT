@@ -30,11 +30,11 @@ private:
   bool present;
 public:
 
-  Sens_Ads1x15 () : ads(ADDRESS),val_0_1(0), val_2_3(0), present(false) {}
+  Sens_Ads1x15 () : val_0_1(0), val_2_3(0), present(false) {}
   ~Sens_Ads1x15() {}
 
   void init (adsGain_t gain) {
-    ads.begin();
+    ads.begin(ADDRESS);
     Wire.beginTransmission(ADDRESS);
     DPRINT(F("ADS1115 init at address "));DHEX(ADDRESS);
     if (Wire.endTransmission() == 0) {
