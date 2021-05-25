@@ -25,17 +25,25 @@
 #define BACKLIGHT_BTN_PIN  6
 #endif
 
+#define SENS_ADS1x15
+// #define SENS_INA219
+
+#ifdef SENS_ADS1x15
 #include "Sensors/Ads1x15.h"
 #define ADS1115_ADDR_1 0x4B
 #define ADS1115_ADDR_2 0x4A
 #define ADS_SENSOR_GAIN   adsGain_t::GAIN_TWO
+#define NUM_CHANNELS       3
+#endif
 
+#ifdef SENS_INA219
+#include "Sensors/INA219_WE.h"
+#define NUM_CHANNELS       1
+#endif
 
 #define CONFIG_BUTTON_PIN  8
 #define LED_PIN            4
 #define BUSY_LED_PIN       5
-
-#define NUM_CHANNELS       3
 
 #define PEERS_PER_CHANNEL  4
 
@@ -301,9 +309,13 @@ class MeasureChannel : public Channel<Hal, DevList1, EmptyList, List4, PEERS_PER
           rmsg.init(device().nextcount(), number(), evcnt++, decisionValue, false , false);
           device().sendPeerEvent(rmsg, *this);
         }
+#ifdef LCD_ADDRESS
         lcd.showCondition(sensor[sIdx].conditionType, sIdx);
+#endif        
       } else {
+#ifdef LCD_ADDRESS
         lcd.showCondition(ct_disabled, sIdx);
+#endif        
       }
 
     }
@@ -345,8 +357,16 @@ private:
 public:
   class CurrentSensors : public Alarm {
     DevType&   dev;
+    
+#ifdef SENS_ADS1x15
     Sens_Ads1x15<ADS1115_ADDR_1> ads1;
     Sens_Ads1x15<ADS1115_ADDR_2> ads2;
+#endif
+
+#ifdef SENS_INA219
+    INA219_WE ina219;
+#endif
+    
     _currentSensor cs[NUM_CHANNELS];
     uint32_t cumulatedCurrentValues[NUM_CHANNELS];
     uint8_t measureCount;
@@ -355,9 +375,18 @@ public:
        virtual ~CurrentSensors () {}
        void measure() {
          //measurement here:
-         cs[0].current = ads1.getCurrent_0_1(dev.channel(1).sampleTime(), dev.channel(1).sctFactor());cs[0].ok = ads1.checkSensor();
-         cs[1].current = ads1.getCurrent_2_3(dev.channel(2).sampleTime(), dev.channel(2).sctFactor());cs[1].ok = ads1.checkSensor();
-         cs[2].current = ads2.getCurrent_0_1(dev.channel(3).sampleTime(), dev.channel(3).sctFactor());cs[2].ok = ads2.checkSensor();
+         if (dev.channel(1).getList1().sensorType() == 5) {
+#ifdef SENS_INA219
+           cs[0].current = ina219.getCurrent_mA(); 
+           cs[0].ok = true;
+#endif
+         } else {
+#ifdef SENS_ADS1x15
+           cs[0].current = ads1.getCurrent_0_1(dev.channel(1).sampleTime(), dev.channel(1).sctFactor());cs[0].ok = ads1.checkSensor();
+           cs[1].current = ads1.getCurrent_2_3(dev.channel(2).sampleTime(), dev.channel(2).sctFactor());cs[1].ok = ads1.checkSensor();
+           cs[2].current = ads2.getCurrent_0_1(dev.channel(3).sampleTime(), dev.channel(3).sctFactor());cs[2].ok = ads2.checkSensor();
+#endif
+         }  
 
 #ifdef LCD_ADDRESS
          lcd.displayValues(cs);
@@ -365,8 +394,20 @@ public:
        }
 
        void init() {
-         ads1.init(ADS_SENSOR_GAIN);
-         ads2.init(ADS_SENSOR_GAIN);
+         if (dev.channel(1).getList1().sensorType() == 5) {
+#ifdef SENS_INA219
+             Wire.begin();
+             ina219.init();
+             ina219.setBusRange(BRNG_16);
+             ina219.setADCMode(SAMPLE_MODE_64);
+             ina219.setPGain(PG_320); // PG_320 = 3.2A / PG_160 = 1.6A / PG_80 = 0,8A / PG_40 = 0,4A
+#endif
+         } else {
+#ifdef SENS_ADS1x16
+             ads1.init(ADS_SENSOR_GAIN);
+             ads2.init(ADS_SENSOR_GAIN);
+#endif
+         }
        }
 
        virtual void trigger (__attribute__ ((unused)) AlarmClock& clock) {
@@ -375,10 +416,14 @@ public:
          dev.busyLed.ledOff();
 
          // add measured current to the cumulated values
+#ifdef SENS_INA219
+         cumulatedCurrentValues[0] += cs[0].current;
+#endif
+#ifdef SENS_ADS1x16
          cumulatedCurrentValues[0] += cs[0].current;
          cumulatedCurrentValues[1] += cs[1].current;
          cumulatedCurrentValues[2] += cs[2].current;
-
+#endif
          measureCount++;
          DPRINT("measure() #");DDEC(measureCount);DPRINT(" of ");DDECLN(dev.txInterval);
 
@@ -455,7 +500,9 @@ public:
 
     uint8_t bOn = this->getList0().backOnTime();
     //DPRINT(F("*LCD Backlight Ontime : ")); DDECLN(bOn);
+#ifdef LCD_ADDRESS    
     lcd.setBackLightOnTime(bOn);
+#endif    
 
     //bool cc = this->getList0().conditionCheckAverage();
     //DPRINT(F("*Condition Check on Average : ")); DDECLN(cc);
